@@ -34,6 +34,6 @@ python iterate-lister.py --file loginy.txt --script helion-lister.py --output wy
 2. Wczytuje i filtruje dane logowania, uwzględniając tylko linie zawierające dwukropek (:).
 3. Dla każdej poprawnej pary login:hasło:
     1. Sprawdza, czy wynik przetwarzania danego konta nie został już wygenerowany.
-    2. Uruchamia skrypt helion-lister.py z odpowiednimi danymi logowania.
+    2. Uruchamia skrypt *-lister.py z odpowiednimi danymi logowania.
     3. Zapisuje wynik działania skryptu do pliku w podanym katalogu.
 4. Działania są logowane z wykorzystaniem kolorowego formatera logów – informacje wyświetlane są zarówno w konsoli, jak i zapisywane do pliku iterate-lister.log.
