@@ -41,4 +41,3 @@ Jeśli dane nie zostaną podane, program poprosi o ich interaktywne wprowadzenie
 1. Logowanie na woblink.com.
 2. Pobranie informacji o zasobach konta.
 3. Zapisanie wyników do pliku tekstowego.
-```
