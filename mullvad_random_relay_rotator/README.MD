@@ -1,15 +1,37 @@
-# Scripts
+# Mullvad Random Relay Rotator
 
-## Mullvad Random Relay Rotator
-This script continuously manages your Mullvad VPN connection by performing the following actions in an infinite loop:
+Mullvad Random Relay Rotator to skrypt służący do zarządzania połączeniem VPN Mullvad. Skrypt cyklicznie zmienia serwer, co pomaga w zwiększeniu anonimowości oraz bezpieczeństwa połączenia.
 
-- Disconnects from the current VPN connection.
-- Selects a random Mullvad server.
-- Reconnects to the VPN.
-- Waits for 10 minutes before repeating the process.
+## Wymagania
 
-Each step is logged with a timestamp, with colored output displayed on the terminal and detailed logs saved to a file.
+- System operacyjny wspierający bash (Linux, macOS itp.)
+- Zainstalowany Mullvad VPN CLI
+- Uprawnienia do wykonywania skryptu (np. chmod +x)
 
-## Usage
+## Instalacja
 
-```./mullvad_random_relay_rotator.sh```
+1. Skopiuj plik `mullvad_random_relay_rotator.sh` do wybranej lokalizacji.
+2. Nadaj skryptowi uprawnienia do wykonania:
+chmod +x mullvad_random_relay_rotator.sh
+
+## Użycie
+
+Uruchom skrypt, podając jako argument interwał restartu (w sekundach):
+
+```
+./mullvad_random_relay_rotator.sh <restart_interval_seconds>
+```
+
+## Przykład
+Aby zmieniać serwer co 10 minut (600 sekund):
+
+```
+./mullvad_random_relay_rotator.sh 600
+```
+
+## Działanie
+
+1. Rozłączenie bieżącego połączenia VPN.
+2. Losowy wybór serwera Mullvad.
+3. Ponowne połączenie z VPN.
+4. Odliczanie do następnej zmiany serwera.
