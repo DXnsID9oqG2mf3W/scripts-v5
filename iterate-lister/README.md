@@ -1,6 +1,6 @@
 # Iterate Lister
 
-Iterate Lister to narzędzie umożliwiające automatyczne uruchamianie skryptu `helion-lister.py` dla każdej pary login:hasło zapisanej w pliku tekstowym. Skrypt iteracyjnie przetwarza konta, zapisując wyniki działania dla każdego konta w osobnym pliku.
+Iterate Lister to narzędzie umożliwiające automatyczne uruchamianie skryptu `*-lister.py` dla każdej pary login:hasło zapisanej w pliku tekstowym. Skrypt iteracyjnie przetwarza konta, zapisując wyniki działania dla każdego konta w osobnym pliku.
 
 ## Wymagania
 
