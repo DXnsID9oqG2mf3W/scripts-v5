@@ -25,7 +25,9 @@ BLUE='\033[0;34m'
 MAGENTA='\033[0;35m'
 NC='\033[0m' # Brak koloru
 
-# Funkcja logująca wiadomość z aktualnym timestampem, zarówno na terminal, jak i do pliku
+# Tu edytuj listę wykluczonych krajów. Wpisuj po angielsku, jak w JSON Mullvada (np. "United States")
+EXCLUDED_COUNTRIES=("Serbia" "UK" "Canada" "Nigeria" "Estonia" "Malaysia" "USA" "Mexico" "China" "Singapore" "Australia" "Japan" "Hong Kong" "Russia" "Turkey" "Brazil" "India")
+
 log() {
     local color="$1"
     shift
@@ -55,17 +57,52 @@ countdown() {
     printf "\n"
 }
 
+get_current_country() {
+    mullvad status --json | jq -r '.details.location.country'
+}
+
+is_country_excluded() {
+    local country="$1"
+    for excluded in "${EXCLUDED_COUNTRIES[@]}"; do
+        if [[ "$country" == "$excluded" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 while true; do
     log "${RED}" "Disconnecting current connection..."
     mullvad disconnect
     sleep 1  # Krótkie oczekiwanie, aby upewnić się, że połączenie zostało rozłączone
 
-    log "${GREEN}" "Selecting random server..."
-    mullvad relay set location any
-    sleep 1  # Pauza na ustawienie nowego serwera
+    # Próbuj do skutku wybrać dozwolony kraj
+    while true; do
+        log "${GREEN}" "Selecting random server..."
+        mullvad relay set location any
+        sleep 1
 
-    log "${YELLOW}" "Reconnecting..."
-    mullvad connect
+        log "${YELLOW}" "Reconnecting..."
+        mullvad connect
+        sleep 3  # Daj chwilę na nawiązanie połączenia
+
+        country=$(get_current_country)
+        if [ -z "$country" ]; then
+            log "${RED}" "Could not get country info from Mullvad. Retrying..."
+            mullvad disconnect
+            sleep 2
+            continue
+        fi
+
+        log "${BLUE}" "Connected to country: $country"
+        if is_country_excluded "$country"; then
+            log "${RED}" "Country '$country' is excluded. Rotating again..."
+            mullvad disconnect
+            sleep 2
+        else
+            break
+        fi
+    done
 
     log "${BLUE}" "Waiting ${RESTART_INTERVAL} seconds before next server change..."
     countdown "$RESTART_INTERVAL"
