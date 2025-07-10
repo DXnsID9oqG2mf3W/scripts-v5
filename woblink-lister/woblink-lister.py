@@ -187,7 +187,7 @@ def accept_regulations(page):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Logowanie do helion")
+    parser = argparse.ArgumentParser(description="Logowanie do woblink")
     parser.add_argument("--login", help="Dane logowania w formacie email:password (np. user@example.com:password123)", required=False)
     parser.add_argument("--email", help="Twój adres email", required=False)
     parser.add_argument("--password", help="Twoje hasło", required=False)
@@ -226,16 +226,41 @@ def main():
             # Obsługa popupu z regulaminem
             accept_regulations(page)
 
-            logging.info("Przechodzę do półki użytkownika...")
-            go_to_shelf(page)
+            # Przejście do dashboardu
+            logging.info("Przechodzę do dashboardu użytkownika...")
+            page.goto("https://woblink.com/account/dashboard", wait_until="domcontentloaded")
 
-            logging.info("Przetwarzam sekcję 'EBooki'.")
-            ebook_items = process_section(page, "EBooki")
-            logging.info(f"Znaleziono {len(ebook_items)} pozycji w sekcji 'EBooki'.")
+            # Sprawdzenie liczby zakupionych produktów
+            product_count = 0
+            try:
+                logging.info("Sprawdzam liczbę zakupionych produktów na dashboardzie.")
+                shelf_tile_selector = ".user-page__tile.user-page__tile--shelf h3"
+                page.wait_for_selector(shelf_tile_selector, timeout=10000)
+                product_count_text = page.query_selector(shelf_tile_selector).inner_text().strip()
 
-            logging.info("Przetwarzam sekcję 'Audiobooki'.")
-            audiobook_items = process_section(page, "Audiobooki")
-            logging.info(f"Znaleziono {len(audiobook_items)} pozycji w sekcji 'Audiobooki'.")
+                try:
+                    product_count = int(product_count_text)
+                    logging.info(f"Zakupione produkty: {product_count}")
+                except ValueError:
+                    logging.error(f"Nie udało się zinterpretować liczby zakupionych produktów: '{product_count_text}'")
+                    product_count = 0
+            except Exception as e:
+                logging.error(f"Błąd podczas sprawdzania liczby zakupionych produktów: {e}")
+                product_count = 0
+
+            if product_count == 0:
+                logging.warning("Brak zakupionych produktów. Pomiń pobieranie półki.")
+            else:
+                logging.info("Przechodzę do półki użytkownika...")
+                go_to_shelf(page)
+
+                logging.info("Przetwarzam sekcję 'EBooki'.")
+                ebook_items = process_section(page, "EBooki")
+                logging.info(f"Znaleziono {len(ebook_items)} pozycji w sekcji 'EBooki'.")
+
+                logging.info("Przetwarzam sekcję 'Audiobooki'.")
+                audiobook_items = process_section(page, "Audiobooki")
+                logging.info(f"Znaleziono {len(audiobook_items)} pozycji w sekcji 'Audiobooki'.")
             
         except Exception as e:
             logging.exception(f"Napotkano nieoczekiwany błąd: {e}")
@@ -264,6 +289,7 @@ def main():
         details_lines.append("Audiobooki:")
         details_lines.extend(audiobook_items)
     
+    # Zbieramy wszystkie linie do jednej listy
     file_lines = []
     file_lines.extend(details_lines)
     
