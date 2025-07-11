@@ -6,11 +6,11 @@ from tqdm import tqdm
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 import argparse
 from pathlib import Path
-import getpass
 import sys
 import io
 import logging
 from colorama import init, Fore, Style
+import json
 
 # Inicjalizacja colorama (zapewnia reset kolorów)
 init(autoreset=True)
@@ -53,6 +53,10 @@ sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 def sanitize_filename(filename):
     return re.sub(r'[\\/*?:"<>|]', "", filename)
 
+def sanitize_login_for_filename(login):
+    # Zamienia wszystko oprócz liter, cyfr i _ na _
+    return re.sub(r'[^a-zA-Z0-9_]', '_', login)
+
 def process_section(page, section_name):
     """
     Funkcja przetwarza daną sekcję (np. "EBooki" lub "Audiobooki"):
@@ -62,7 +66,7 @@ def process_section(page, section_name):
          Jeśli lista elementów jest pusta, przerywa iterację.
       4. Jeśli dostępny jest przycisk ">" (next), klika go, czeka na loader,
          aż zniknie, i przetwarza kolejną stronę.
-    Zwraca listę pozycji w formacie "Autor - Tytuł".
+    Zwraca listę pozycji jako słowniki: author, title, cover.
     """
     items_found = []
     try:        
@@ -102,14 +106,17 @@ def process_section(page, section_name):
                 try:
                     title_element = item.query_selector("h3.shelflist-item__title")
                     author_element = item.query_selector("p.shelflist-item__author")
-                    if title_element and author_element:
-                        title = title_element.inner_text().strip()
-                        author = author_element.inner_text().strip()
-                        book_info = f"{author} - {title}"
-                        items_found.append(book_info)
-                        logging.debug(f"Pozycja: {book_info}")
-                    else:
-                        logging.warning("Brak tytułu lub autora w jednym z elementów.")
+                    img_element = item.query_selector("img.v-lazy-image")
+                    
+                    title = title_element.inner_text().strip() if title_element else ""
+                    author = author_element.inner_text().strip() if author_element else ""
+                    cover = img_element.get_attribute("src") if img_element else ""
+
+                    items_found.append({
+                        "author": author,
+                        "title": title,
+                        "cover": cover,
+                    })
                 except Exception as e:
                     logging.error(f"Błąd podczas przetwarzania elementu {section_name}: {e}")
             
@@ -186,37 +193,20 @@ def accept_regulations(page):
         logging.info("Popup z regulaminem nie został znaleziony lub już został obsłużony.")
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Logowanie do woblink")
-    parser.add_argument("--login", help="Dane logowania w formacie email:password (np. user@example.com:password123)", required=False)
-    parser.add_argument("--email", help="Twój adres email", required=False)
-    parser.add_argument("--password", help="Twoje hasło", required=False)
-    parser.add_argument("--log", help="Włącz logowanie", action="store_true")
-    # Flaga --head uruchamia przeglądarkę w trybie widocznym (headful)
-    parser.add_argument("--head", help="Uruchom przeglądarkę w trybie widocznym", action="store_true")
-    args = parser.parse_args()
-
-    if not args.log:
-        logging.disable(logging.CRITICAL)
-
-    if args.login:
-        try:
-            email, password = args.login.split(":", 1)
-        except ValueError:
-            logging.error("Nieprawidłowy format danych logowania. Oczekiwany format: email:password")
-            sys.exit(1)
-    else:
-        email = args.email or input("Podaj email: ")
-        password = args.password or getpass.getpass("Podaj hasło: ")
-
+def process_login(email, password, output_dir, headless=False, log_enabled=False):
     ebook_items = []
     audiobook_items = []
-    
+
+    if not log_enabled:
+        logging.disable(logging.CRITICAL)
+    else:
+        logging.disable(logging.NOTSET)
+
     with sync_playwright() as playwright:
         try:
             logging.info("Uruchamiam przeglądarkę...")
-            # Jeśli flaga --head jest podana, headless będzie False
-            browser = playwright.chromium.launch(channel="chrome", headless=not args.head)
+            # Jeśli headless==False to tryb widoczny
+            browser = playwright.chromium.launch(channel="chrome", headless=headless)
             context = browser.new_context()
             page = context.new_page()
 
@@ -269,33 +259,77 @@ def main():
             browser.close()
     
     # Przygotowywanie podsumowania oraz zapisywanie wyników do pliku
-    summary_parts = []
-    if ebook_items:
-        summary_parts.append(f"{len(ebook_items)}x ebook")
-    if audiobook_items:
-        summary_parts.append(f"{len(audiobook_items)}x audiobook")
-    summary_line = ", ".join(summary_parts)
+    summary_json = {
+        "credentials": {
+            "login": email,
+            "password": password
+        },
+        "resources": {
+            "ebooks": {
+                "count": len(ebook_items),
+                "items": ebook_items
+            },
+            "audiobooks": {
+                "count": len(audiobook_items),
+                "items": audiobook_items
+            },
+            "courses": {
+                "count": 0,
+                "items": []
+            }
+        }
+    }
+
+    # Zapisz wynik do pliku osobnego dla każdego loginu
+    safe_login = sanitize_login_for_filename(email)
+    output_filename = f"shelf_{safe_login}.json"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / output_filename
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(summary_json, f, indent=2, ensure_ascii=False)
     
-    if not summary_line:
-        summary_line = ""
-    
-    details_lines = []
-    if ebook_items:
-        details_lines.append("Ebooki:")
-        details_lines.extend(ebook_items)
-    if audiobook_items:
-        if ebook_items:
-            details_lines.append("")
-        details_lines.append("Audiobooki:")
-        details_lines.extend(audiobook_items)
-    
-    # Zbieramy wszystkie linie do jednej listy
-    file_lines = []
-    file_lines.extend(details_lines)
-    
-    output_content = "\n".join(file_lines)
-    
-    print(output_content)
+    print(f"Zapisano wynik do {output_path}")
+
+def main():
+    parser = argparse.ArgumentParser(description="Logowanie do woblink")
+    parser.add_argument("--login", help="Dane logowania w formacie email:password (np. user@example.com:password123)", required=False)
+    parser.add_argument("--credentials-file", help="Ścieżka do pliku z listą danych logowania (login:haslo po jednym w wierszu)", required=False)
+    parser.add_argument("--log", help="Włącz logowanie", action="store_true")
+    # Flaga --head uruchamia przeglądarkę w trybie widocznym (headful)
+    parser.add_argument("--head", help="Uruchom przeglądarkę w trybie widocznym", action="store_true")
+    parser.add_argument("--output", help="Katalog docelowy na pliki json (jeśli nie podano, zapisz w 'results_json')", required=False)
+    args = parser.parse_args()
+
+    # NIE pozwalaj na brak obu flag login/credentials-file
+    if (not args.login and not args.credentials_file) or (args.login and args.credentials_file):
+        print("Podaj JEDNĄ flagę: --login email:haslo ALBO --credentials-file plik.txt")
+        sys.exit(1)
+
+    output_dir = Path(args.output) if args.output else Path("results_json")
+
+    headless = not args.head
+    log_enabled = args.log
+
+    if args.login:
+        try:
+            email, password = args.login.split(":", 1)
+        except ValueError:
+            print("Nieprawidłowy format --login. Oczekiwany: email:haslo")
+            sys.exit(1)
+        process_login(email, password, output_dir, headless=headless, log_enabled=log_enabled)
+    else:
+        # credentials-file
+        if not os.path.exists(args.credentials_file):
+            print(f"Plik {args.credentials_file} nie istnieje.")
+            sys.exit(1)
+        with open(args.credentials_file, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or ":" not in line:
+                    continue
+                email, password = line.split(":", 1)
+                process_login(email.strip(), password.strip(), output_dir, headless=headless, log_enabled=log_enabled)
 
 if __name__ == "__main__":
     main()
