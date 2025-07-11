@@ -7,7 +7,7 @@ import hashlib
 import requests
 from flask import Flask, render_template_string, request, send_from_directory, abort
 
-# Kolorowanie ANSI do logów
+# ANSI colors for logs
 class Color:
     CYAN = "\033[96m"
     GREEN = "\033[92m"
@@ -24,10 +24,20 @@ def log_book(action, category, title, author, url, msg, color=Color.RESET):
     urlinfo = f"{Color.GRAY}{url or '-'}{Color.RESET}"
     print(f"{prefix} {meta}\n      {urlinfo}\n    {msg}{Color.RESET}")
 
-# Bootstrap i style CSS
 BOOTSTRAP = """
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 <style>
+body {
+    padding-top: 72px;
+    background: #f8f9fa;
+}
+.sticky-top {
+    z-index: 1020 !important;
+}
+.navbar {
+    box-shadow: 0 2px 10px #0001;
+    background: #fffefe;
+}
 #covers-progress {
     position: fixed;
     top: 20px;
@@ -42,57 +52,50 @@ BOOTSTRAP = """
     font-size: 1rem;
     display: none;
 }
-.placeholder-cover, .card-img-top {
+.card-img-top, .placeholder-cover {
     width: 100%;
     height: 240px;
+    object-fit: contain;
+    background: #ececec;
+    position: relative;
+    z-index: 1;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: #ececec;
-    color: #b5b5b5;
-    border-radius: 0.375rem;
     font-size: 60px;
-    transition: transform 0.25s cubic-bezier(.4,2,.6,1), box-shadow 0.25s;
+    transition: filter 0.25s cubic-bezier(.4,2,.6,1);
+}
+.cover-hover {
     position: relative;
-    overflow: hidden;
+    overflow: visible;
 }
-.card-img-top {
-    object-fit: contain;
-    background: #ececec;
-    display: block;
-}
-.card-img-top.enlarged, .placeholder-cover.enlarged {
-    transform: scale(1.5);
-    box-shadow: 0 4px 24px #888a;
-    z-index: 50;
-}
-.cover-actions {
-    display: none;
+.cover-mask {
+    transition: opacity 0.25s;
+    opacity: 0;
     position: absolute;
-    left: 0; right: 0; bottom: 0;
-    padding: 0.4em 0.4em;
-    background: linear-gradient(to top, #111a 80%, #fff0 100%);
-    z-index: 100;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(24,29,49,0.62);
+    display: flex;
+    align-items: center;
     justify-content: center;
-    gap: 0.5em;
+    z-index: 2;
+    pointer-events: none;
 }
-.cover-hover:hover .card-img-top,
-.cover-hover:hover .placeholder-cover {
-    cursor: zoom-in;
+.cover-hover:hover .cover-mask {
+    opacity: 1;
+    pointer-events: all;
 }
-.cover-hover:hover .card-img-top,
-.cover-hover:hover .placeholder-cover {
-    filter: brightness(0.92);
+.cover-mask .btn-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    align-items: center;
 }
-.cover-hover:hover .cover-actions {
-    display: flex !important;
-    pointer-events: auto;
-}
-.cover-hover .cover-actions .btn {
-    opacity: 0.95;
-    font-size: 0.95em;
-    box-shadow: 0 1px 4px #0002;
-    border: none;
+.cover-mask .btn {
+    min-width: 180px;
+    font-size: 1em;
+    box-shadow: 0 1px 8px #0002;
+    font-weight: 600;
 }
 .page-link.active, .page-link:active {
     background: #0056b3 !important;
@@ -105,7 +108,6 @@ BOOTSTRAP = """
 </style>
 """
 
-# JS: lazy loading, enlarge, przyciski, logika coverów
 LAZY_JS = """
 <script>
 function makeBookSvg() {
@@ -126,14 +128,9 @@ function loadCover(div, url) {
             img.className = 'card-img-top';
             img.style = "height:240px;object-fit:contain;";
             img.src = URL.createObjectURL(blob);
-            // Event enlarge
-            img.addEventListener('mouseenter', function(){ img.classList.add('enlarged'); });
-            img.addEventListener('mouseleave', function(){ img.classList.remove('enlarged'); });
             div.parentNode.replaceChild(img, div);
         })
-        .catch(_ => {
-            // zostaje placeholder
-        });
+        .catch(_ => { /* stays as placeholder */ });
 }
 document.addEventListener('DOMContentLoaded', function() {
     const placeholders = document.querySelectorAll('.placeholder-cover[data-cover-id]');
@@ -173,31 +170,12 @@ document.addEventListener('DOMContentLoaded', function() {
             update();
         });
     }
-    // ENLARGE ON HOVER and show buttons (dla placeholdera i dla IMG)
-    function setEnlargeListeners() {
-        document.querySelectorAll('.cover-hover').forEach(function(cover) {
-            let imgOrDiv = cover.querySelector('.card-img-top, .placeholder-cover');
-            let actions = cover.querySelector('.cover-actions');
-            if(imgOrDiv){
-                imgOrDiv.addEventListener('mouseenter', function(){
-                    imgOrDiv.classList.add('enlarged');
-                    if(actions) actions.style.display = 'flex';
-                });
-                imgOrDiv.addEventListener('mouseleave', function(){
-                    imgOrDiv.classList.remove('enlarged');
-                    if(actions) actions.style.display = 'none';
-                });
-            }
-        });
-    }
-    setTimeout(setEnlargeListeners, 400); // allow DOM update
     // BUTTON HANDLERS
     document.body.addEventListener('click', function(e) {
         if(e.target.dataset && e.target.dataset.google) {
-            let author = e.target.dataset.author || '';
             let title = e.target.dataset.title || '';
-            let q = encodeURIComponent(`${author} ${title} woblink.com`);
-            window.open('https://www.google.com/search?q=' + q, '_blank');
+            let q = encodeURIComponent(`${title} woblink.com`);
+            window.open('https://woblink.com/katalog/ksiazki?szukasz=' + q, '_blank');
         }
         if(e.target.dataset && e.target.dataset.copylogin) {
             let loginpass = e.target.dataset.copylogin;
@@ -206,16 +184,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     e.target.innerText = "Skopiowano!";
                     setTimeout(() => { e.target.innerText = "Kopiuj dane logowania"; }, 1400);
                 });
-            } else {
-                let area = document.createElement("textarea");
-                area.value = loginpass;
-                document.body.appendChild(area);
-                area.focus();
-                area.select();
-                try { document.execCommand('copy'); } catch (err) {}
-                area.remove();
-                e.target.innerText = "Skopiowano!";
-                setTimeout(() => { e.target.innerText = "Kopiuj dane logowania"; }, 1400);
+            }
+        }
+        if(e.target.dataset && e.target.dataset.copyloginOpen) {
+            let loginpass = e.target.dataset.copyloginOpen;
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(loginpass).then(function() {
+                    window.open('https://woblink.com/logowanie', '_blank');
+                });
             }
         }
     });
@@ -224,9 +200,16 @@ document.addEventListener('DOMContentLoaded', function() {
 """
 
 TEMPLATE = BOOTSTRAP + """
+<nav class="navbar navbar-expand-lg navbar-light bg-light sticky-top">
+  <div class="container">
+    <a class="navbar-brand" href="#">Panel Biblioteka</a>
+    <div class="d-flex ms-auto">
+      <span class="navbar-text text-muted me-3" style="font-size:1em;">{{total_items}} wyników</span>
+    </div>
+  </div>
+</nav>
 <div id="covers-progress"></div>
-<div class="container mt-4">
-  <h2 class="mb-4">Panel administracyjny - Biblioteka</h2>
+<div class="container mt-2 mb-5">
   <form method="get" class="row g-3 mb-3 align-items-center">
     <div class="col-auto">
       <select class="form-select" name="category">
@@ -237,8 +220,8 @@ TEMPLATE = BOOTSTRAP + """
     </div>
     <div class="col-auto">
       <select class="form-select" name="sort">
-        <option value="author" {% if sort=='author' %}selected{% endif %}>Autor</option>
-        <option value="title" {% if sort=='title' %}selected{% endif %}>Tytuł</option>
+        <option value="author" {% if sort=='author' %}selected{% endif %}>Autor (A-Z)</option>
+        <option value="title" {% if sort=='title' %}selected{% endif %}>Tytuł (A-Z)</option>
       </select>
     </div>
     <div class="col-auto">
@@ -252,12 +235,12 @@ TEMPLATE = BOOTSTRAP + """
       <button class="btn btn-primary">Wyświetl</button>
     </div>
     <div class="col text-end text-muted" style="font-size:0.95em;">
-      {{total_items}} wyników &nbsp;
+      Strona <b>{{page}}</b> z <b>{{pages|length>0 and pages[-1] or 1}}</b>
     </div>
   </form>
-
-  <nav aria-label="Paginacja">
-    <ul class="pagination">
+  <!-- TOP PAGINATOR -->
+  <nav aria-label="Paginacja" class="mb-3">
+    <ul class="pagination justify-content-center">
       <li class="page-item {% if page==1 %}disabled{% endif %}">
         <a class="page-link" href="?category={{category}}&sort={{sort}}&per_page={{per_page}}&page=1">&laquo;</a>
       </li>
@@ -283,19 +266,20 @@ TEMPLATE = BOOTSTRAP + """
               <line x1="5" y1="19" x2="19" y2="19"/>
             </svg>
         </div>
-        <div class="cover-actions" style="display:none;">
-            <button type="button" class="btn btn-light btn-sm"
-                data-google="1"
-                data-author="{{item.author}}"
-                data-title="{{item.title}}">
-                Szukaj w Google
-            </button>
-            {% if item.login_pass %}
-            <button type="button" class="btn btn-secondary btn-sm"
-                data-copylogin="{{item.login_pass}}">
-                Kopiuj dane logowania
-            </button>
-            {% endif %}
+        <div class="cover-mask">
+            <div class="btn-group">
+                <button type="button" class="btn btn-primary"
+                    data-google="1"
+                    data-title="{{item.title}}">
+                    Szukaj w Woblink
+                </button>
+                {% if item.login_pass %}
+                <button type="button" class="btn btn-secondary"
+                    data-copylogin="{{item.login_pass}}">
+                    Kopiuj dane logowania
+                </button>
+                {% endif %}
+            </div>
         </div>
         <div class="card-body">
           <h5 class="card-title">{{item.title}}</h5>
@@ -305,6 +289,22 @@ TEMPLATE = BOOTSTRAP + """
     </div>
     {% endfor %}
   </div>
+  <!-- BOTTOM PAGINATOR -->
+  <nav aria-label="Paginacja" class="mt-3">
+    <ul class="pagination justify-content-center">
+      <li class="page-item {% if page==1 %}disabled{% endif %}">
+        <a class="page-link" href="?category={{category}}&sort={{sort}}&per_page={{per_page}}&page=1">&laquo;</a>
+      </li>
+      {% for p in pages %}
+      <li class="page-item {% if p==page %}active{% endif %}">
+        <a class="page-link" href="?category={{category}}&sort={{sort}}&per_page={{per_page}}&page={{p}}">{{p}}</a>
+      </li>
+      {% endfor %}
+      <li class="page-item {% if page==pages|last %}disabled{% endif %}">
+        <a class="page-link" href="?category={{category}}&sort={{sort}}&per_page={{per_page}}&page={{pages|last}}">&raquo;</a>
+      </li>
+    </ul>
+  </nav>
 </div>
 """ + LAZY_JS
 
@@ -323,7 +323,6 @@ def get_cover_local_path(url):
     return os.path.join(cache_dir, filename)
 
 def write_placeholder(local_path):
-    # Tworzy plik SVG z ikoną książki (w cache)
     svg = b'''<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 64 64">
       <rect width="100%" height="100%" fill="#ececec"/>
       <path d="M12 56V12a4 4 0 0 1 4-4h32a4 4 0 0 1 4 4v44" fill="none" stroke="#b5b5b5" stroke-width="3"/>
@@ -345,11 +344,15 @@ def create_app(db_path):
         conn.close()
         return result[0] if result else 0
 
-    def get_items(category='ebooks', sort='author', per_page=50, page=1):
+    def get_items(category='ebooks', sort=None, per_page=50, page=1):
         if category not in ['ebooks', 'audiobooks', 'courses']:
             category = 'ebooks'
-        if sort not in ['author', 'title']:
-            sort = 'author'
+        # --- Sort: default is author, title ---
+        sort_clause = "author COLLATE NOCASE ASC, title COLLATE NOCASE ASC"
+        if sort == "title":
+            sort_clause = "title COLLATE NOCASE ASC"
+        elif sort == "author":
+            sort_clause = "author COLLATE NOCASE ASC, title COLLATE NOCASE ASC"
         per_page = max(1, min(200, int(per_page)))
         page = max(1, int(page))
         offset = (page-1)*per_page
@@ -358,7 +361,7 @@ def create_app(db_path):
         cursor.execute(f"""
             SELECT {category}.author, {category}.title, {category}.cover, site.login, site.password
             FROM {category} JOIN site ON {category}.site_id = site.id
-            ORDER BY {category}.{sort} COLLATE NOCASE ASC
+            ORDER BY {sort_clause}
             LIMIT ? OFFSET ?
         """, (per_page, offset))
         rows = cursor.fetchall()
@@ -380,7 +383,7 @@ def create_app(db_path):
     @app.route("/")
     def index():
         category = request.args.get("category", "ebooks")
-        sort = request.args.get("sort", "author")
+        sort = request.args.get("sort", None)
         try:
             per_page = int(request.args.get("per_page", 50))
         except Exception:
@@ -393,7 +396,6 @@ def create_app(db_path):
         total_items = get_total_items(category)
         last_page = max(1, (total_items + per_page - 1) // per_page)
         page = min(max(1, page), last_page)
-        # Paginacja – pokazuj max 7 numerów
         if last_page <= 7:
             pages = list(range(1, last_page+1))
         else:
@@ -408,7 +410,7 @@ def create_app(db_path):
             TEMPLATE,
             items=items,
             category=category,
-            sort=sort,
+            sort=sort or "author",
             page=page,
             per_page=per_page,
             total_items=total_items,
@@ -417,12 +419,10 @@ def create_app(db_path):
 
     @app.route("/cover/<cover_id>")
     def cover(cover_id):
-        # Ustal kategorię, tytuł, autora oraz cover url dla danego cover_id
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         found_url = None
         title = author = category = None
-        # Szukamy we wszystkich kategoriach
         for cat in ['ebooks', 'audiobooks', 'courses']:
             cursor.execute(f"SELECT title, author, cover FROM {cat} WHERE cover IS NOT NULL")
             for row in cursor.fetchall():
@@ -437,18 +437,14 @@ def create_app(db_path):
                 break
         conn.close()
         local_path = get_cover_local_path(found_url if found_url else cover_id)
-        # LOG z profesjonalnym opisem
         log_book("COVER", category or "-", title or "-", author or "-", found_url, f"Przetwarzanie okładki", Color.BLUE)
-        # Obsługa cache
         if os.path.exists(local_path):
             log_book("COVER", category or "-", title or "-", author or "-", found_url, f"Z cache: {local_path}", Color.GREEN)
             return send_from_directory(os.path.dirname(local_path), os.path.basename(local_path))
-        # Względny adres lub brak – placeholder
         if (not found_url) or found_url.strip().startswith("/") or not found_url.lower().startswith(("http://", "https://")):
             log_book("COVER", category or "-", title or "-", author or "-", found_url, f"Adres brak lub względny, zapisuję placeholder", Color.YELLOW)
             write_placeholder(local_path)
             return send_from_directory(os.path.dirname(local_path), os.path.basename(local_path))
-        # Próba pobrania
         try:
             log_book("COVER", category or "-", title or "-", author or "-", found_url, f"Pobieram z internetu", Color.CYAN)
             r = requests.get(found_url, timeout=10)
