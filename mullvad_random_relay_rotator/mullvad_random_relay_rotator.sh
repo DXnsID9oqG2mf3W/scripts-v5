@@ -26,7 +26,9 @@ MAGENTA='\033[0;35m'
 NC='\033[0m' # Brak koloru
 
 # Tu edytuj listę wykluczonych krajów. Wpisuj po angielsku, jak w JSON Mullvada (np. "United States")
-EXCLUDED_COUNTRIES=("Serbia" "UK" "Canada" "Nigeria" "Estonia" "Malaysia" "USA" "Mexico" "China" "Singapore" "Australia" "Japan" "Hong Kong" "Russia" "Turkey" "Brazil" "India")
+EXCLUDED_COUNTRIES=("Colombia" "Austria" "Thailand" "Serbia" "UK" "Canada" "Nigeria" 
+"Estonia" 
+"Malaysia" "USA" "Mexico" "China" "Singapore" "Australia" "Japan" "Hong Kong" "Russia" "Turkey" "Brazil" "India")
 
 log() {
     local color="$1"
