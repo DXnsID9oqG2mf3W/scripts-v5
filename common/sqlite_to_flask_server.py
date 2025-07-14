@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import requests
 from flask import Flask, render_template_string, request, send_from_directory, abort
+from collections import defaultdict
 
 # ANSI colors for logs
 class Color:
@@ -273,11 +274,13 @@ TEMPLATE = BOOTSTRAP + """
                     data-title="{{item.title}}">
                     Szukaj w Woblink
                 </button>
-                {% if item.login_pass %}
-                <button type="button" class="btn btn-secondary"
-                    data-copylogin="{{item.login_pass}}">
-                    Kopiuj dane logowania
-                </button>
+                {% if item.login_pass_list_idx %}
+                    {% for idx, lp in item.login_pass_list_idx %}
+                        <button type="button" class="btn btn-secondary mb-1"
+                            data-copylogin="{{lp}}">
+                            Kopiuj dane logowania #{{idx}}
+                        </button>
+                    {% endfor %}
                 {% endif %}
             </div>
         </div>
@@ -347,7 +350,6 @@ def create_app(db_path):
     def get_items(category='ebooks', sort=None, per_page=50, page=1):
         if category not in ['ebooks', 'audiobooks', 'courses']:
             category = 'ebooks'
-        # --- Sort: default is author, title ---
         sort_clause = "author COLLATE NOCASE ASC, title COLLATE NOCASE ASC"
         if sort == "title":
             sort_clause = "title COLLATE NOCASE ASC"
@@ -366,18 +368,21 @@ def create_app(db_path):
         """, (per_page, offset))
         rows = cursor.fetchall()
         conn.close()
-        items = []
+        grouped = defaultdict(lambda: {"author": "", "title": "", "cover_url": None, "login_pass_list": []})
         for r in rows:
+            key = (r[0], r[1])
             cover_remote = r[2] if r[2] else None
             cover_url = f"/cover/{hash_url(cover_remote)}" if cover_remote else None
             login_pass = f"{r[3]}:{r[4]}" if r[3] and r[4] else None
-            items.append({
-                'author': r[0],
-                'title': r[1],
-                'cover_url': cover_url,
-                'cover_remote': cover_remote,
-                'login_pass': login_pass
-            })
+            grouped[key]["author"] = r[0]
+            grouped[key]["title"] = r[1]
+            grouped[key]["cover_url"] = cover_url
+            if login_pass:
+                grouped[key]["login_pass_list"].append(login_pass)
+        items = list(grouped.values())
+        # Dodajemy numerację do login_pass_list dla Jinja2
+        for item in items:
+            item["login_pass_list_idx"] = list(enumerate(item["login_pass_list"], start=1))
         return items
 
     @app.route("/")
