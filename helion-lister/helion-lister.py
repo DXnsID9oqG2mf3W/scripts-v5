@@ -58,7 +58,22 @@ def login(page, email, password):
     page.fill('input[name="password"]', password)
     page.click('#log_in_submit')
     page.wait_for_load_state("domcontentloaded")
-    time.sleep(1)
+    # Teraz czekaj na tekst powitalny
+    welcome_text = "Witaj w Twoim koncie"
+    try:
+        # Czekamy max 7 sekund na selector z tekstem powitalnym
+        page.wait_for_selector(f"text={welcome_text}", timeout=7000)
+        logging.success("Zalogowano pomyślnie.")
+        return True
+    except Exception as e:
+        # Spróbuj jeszcze podejrzeć body dla debugu
+        try:
+            body = page.inner_text("body")
+            logging.debug("Fragment body:\n" + body[:600])
+        except Exception:
+            pass
+        logging.error(f"Nie zalogowano! Nie znaleziono tekstu powitalnego \"{welcome_text}\" dla {email}")
+        return False
 
 def go_to_biblioteka(page, kind):
     url = f"https://helion.pl/users/konto/biblioteka/{kind}"
@@ -96,7 +111,10 @@ def process_login(email, password, output_dir, headless, output_path):
         page = context.new_page()
         try:
             logging.info(f"Loguję: {email}")
-            login(page, email, password)
+            ok = login(page, email, password)
+            if not ok:
+                logging.error(f"Przerwano, nie udało się zalogować do konta {email}.")
+                return
             go_to_biblioteka(page, "ebooki")
             ebooks = get_books(page)
             go_to_biblioteka(page, "audiobooki")
@@ -162,7 +180,6 @@ def main():
     headless = not args.head
 
     credentials = load_credentials(args)
-    # Jeśli podano inne flagi, ale NIE podano loginu ani credentials-file, wyświetl czytelną podpowiedź i help.
     if not credentials:
         print(
             f"{Fore.YELLOW}Musisz podać login (--login email:haslo) lub plik z loginami (--credentials-file plik.txt).{Style.RESET_ALL}\n"
@@ -179,6 +196,9 @@ def main():
             continue
         safe_login = sanitize_login_for_filename(email)
         output_path = output_dir / f"shelf_{safe_login}.json"
+        if output_path.exists():
+            logging.info(f"Pomięto, już przetworzono ({output_path.name})")
+            continue
         current_num = f"{Fore.GREEN}{idx}{Style.RESET_ALL}"
         total_num = f"{Fore.RED}{total}{Style.RESET_ALL}"
         prefix = f"{Style.BRIGHT}[{current_num}/{total_num}]{Style.RESET_ALL} Konto: {email}"
