@@ -173,3 +173,5 @@ cython_debug/
 .DS_Store
 
 common/sqlite_to_flask_server_cache/
+
+common/sqlite_to_flask_server/sqlite_to_flask_server_cache/
