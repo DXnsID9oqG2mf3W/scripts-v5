@@ -4,10 +4,13 @@ import sys
 import json
 import sqlite3
 import argparse
+import re
+import shutil
 
 def create_tables(conn):
     """
     Usuwa (jeśli istnieją) i tworzy tabele:
+      - domain_info (id, domain)
       - site (id, login, password)
       - ebooks (id, site_id, author, title, cover)
       - courses (id, site_id, author, title, cover)
@@ -20,6 +23,15 @@ def create_tables(conn):
     cursor.execute("DROP TABLE IF EXISTS courses")
     cursor.execute("DROP TABLE IF EXISTS ebooks")
     cursor.execute("DROP TABLE IF EXISTS site")
+    cursor.execute("DROP TABLE IF EXISTS domain_info")
+    
+    # Tabela domeny – tylko raz dla całej bazy
+    cursor.execute("""
+        CREATE TABLE domain_info (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            domain TEXT NOT NULL
+        )
+    """)
     
     # Tabela site
     cursor.execute("""
@@ -65,6 +77,14 @@ def create_tables(conn):
             FOREIGN KEY(site_id) REFERENCES site(id)
         )
     """)
+    conn.commit()
+
+def save_domain(conn, domain):
+    """
+    Zapisuje domenę do osobnej tabeli (tylko raz dla całej bazy)
+    """
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO domain_info (domain) VALUES (?)", (domain,))
     conn.commit()
 
 def process_json_file(file_path, conn):
@@ -134,24 +154,39 @@ def main():
     parser = argparse.ArgumentParser(description="Zamienia kolekcję plików JSON (z informacją o ebookach, kursach, audiobookach) na bazę SQLite.")
     parser.add_argument('--input', '-i', required=True, help='Folder wejściowy z plikami JSON')
     parser.add_argument('--output', '-o', default='results_sqlite', help='Folder wyjściowy na plik bazy SQLite (domyślnie: results_sqlite)')
+    parser.add_argument('--domain', '-d', required=True, help='Domena (np. https://helion.pl) – zapisywana raz dla całej bazy')
     args = parser.parse_args()
 
     input_folder = args.input
     output_folder = args.output
-    
+    domain = args.domain
+
+    # Walidacja domeny już na początku
+    if not isinstance(domain, str) or not re.match(r"^https?://[a-zA-Z0-9\-\.]+", domain):
+        print(f"Błąd: Niepoprawna domena podana w argumencie --domain (\"{domain}\")")
+        sys.exit(1)
+
     if not os.path.isdir(input_folder):
         print("Podana ścieżka do folderu z plikami JSON nie istnieje lub nie jest folderem.")
         sys.exit(1)
-    
+
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
-    
+
     # Ustalamy ścieżkę do pliku bazy SQLite (np. "baza.db" w folderze wyjściowym)
     db_path = os.path.join(output_folder, "baza.db")
+    # BACKUP jeśli istnieje stara baza
+    if os.path.isfile(db_path):
+        shutil.copy2(db_path, db_path + '.bak')
+        print(f"Utworzono kopię zapasową: {db_path}.bak")
+
     conn = sqlite3.connect(db_path)
     
     # Tworzymy (lub nadpisujemy) tabele z relacjami
     create_tables(conn)
+
+    # Zapisujemy domenę tylko raz dla całej bazy (nowa tabela)
+    save_domain(conn, domain)
     
     # Przetwarzamy wszystkie pliki .json w folderze wejściowym
     json_count = 0
